@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.wav
+dist/
+image.png
+claude-voice-over-ssh.md

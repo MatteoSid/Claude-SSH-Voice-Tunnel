@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# claude-voice shim: stands in for sox `rec` / `arecord` on the remote server.
+# Streams raw 16 kHz mono s16le PCM from the microphone bridge (SSH reverse tunnel).
+case "$1" in
+  --version|-V) echo "rec (claude-voice shim)"; exit 0 ;;
+esac
+PORT="${CLAUDE_VOICE_PORT:-48713}"
+if ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
+  echo "claude-voice: no microphone tunnel on 127.0.0.1:$PORT (connect with 'claude-voice connect')" >&2
+  exit 1
+fi
+exec 3<>"/dev/tcp/127.0.0.1/$PORT"
+exec cat <&3

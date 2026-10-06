@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# claude-voice: run the real `claude`; if the microphone tunnel is up, enable voice for this process.
+D="$HOME/.claude-voice"; PORT="${CLAUDE_VOICE_PORT:-48713}"
+REAL="$(type -P claude)" || { echo "claude-voice: claude not found in PATH" >&2; exit 127; }
+if [ -n "$CLAUDE_VOICE_OFF" ] || ! ss -ltn 2>/dev/null | grep -q "127.0.0.1:$PORT "; then
+  exec "$REAL" "$@"
+fi
+export PATH="$D/shim:$PATH" CLAUDE_VOICE_PORT="$PORT"
+# Claude prefers native ALSA capture if /proc/asound/cards lists any card (even playback-only HDMI),
+# bypassing the shim. Hide that file from this process only (unprivileged mount namespace, same uid).
+if grep -q . /proc/asound/cards 2>/dev/null && unshare -rm sh -c 'mount --bind /dev/null /proc/asound/cards' 2>/dev/null; then
+  exec unshare -rm sh -c 'mount --bind /dev/null /proc/asound/cards && u=$0 g=$1 r=$2 && shift 2 && exec unshare -U --map-user="$u" --map-group="$g" "$r" "$@"' "$(id -u)" "$(id -g)" "$REAL" "$@"
+fi
+exec "$REAL" "$@"
