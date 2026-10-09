@@ -217,8 +217,7 @@ wheels = [
 ]
 
 [[package]]
-name = "claude-voice"
-version = "0.1.0"
+name = "claude-ssh-voice"
 source = { editable = "." }
 dependencies = [
     { name = "sounddevice" },

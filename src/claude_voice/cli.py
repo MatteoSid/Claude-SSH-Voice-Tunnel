@@ -1,6 +1,7 @@
 import argparse
 import io
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -9,11 +10,18 @@ import wave
 from importlib import resources
 from pathlib import Path
 
-from .bridge import RATE, Bridge
+from . import __version__
 
-REMOTE_DIR = "$HOME/.claude-voice"
-MARK = "# >>> claude-voice >>>"
-BASHRC = [MARK, 'claude() { "$HOME/.claude-voice/bin/claude-wrap" "$@"; }', "# <<< claude-voice <<<"]
+DEFAULT_PORT = 48713
+
+
+def _sd():
+    """Import sounddevice with a helpful message when the PortAudio library is missing (Linux)."""
+    try:
+        import sounddevice
+    except OSError as e:
+        sys.exit(f"claude-voice: {e}\nOn Debian/Ubuntu install it with:  sudo apt install libportaudio2")
+    return sounddevice
 
 
 def _device(v):
@@ -21,12 +29,12 @@ def _device(v):
 
 
 def cmd_devices(_):
-    import sounddevice as sd
-    print(sd.query_devices())
+    print(_sd().query_devices())
 
 
 def cmd_test(a):
-    import sounddevice as sd
+    sd = _sd()
+    from .bridge import RATE
     print(f"Recording {a.seconds}s from the microphone... speak now.")
     data = sd.rec(int(a.seconds * RATE), samplerate=RATE, channels=1, dtype="int16",
                   device=_device(a.device))
@@ -39,10 +47,10 @@ def cmd_test(a):
 
 
 def _remote_bundle():
-    """tar of ~/.claude-voice: bin/claude-wrap, shim/rec, shim/arecord -> rec."""
+    """tar of ~/.claude-voice: bin/claude-wrap, shim/rec, shim/arecord -> rec, setup.sh."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as t:
-        for name, dest in (("claude-wrap", "bin/claude-wrap"), ("rec", "shim/rec")):
+        for name, dest in (("claude-wrap", "bin/claude-wrap"), ("rec", "shim/rec"), ("setup.sh", "setup.sh")):
             data = resources.files("claude_voice").joinpath("shim", name).read_bytes().replace(b"\r\n", b"\n")
             ti = tarfile.TarInfo(dest); ti.size = len(data); ti.mode = 0o755
             t.addfile(ti, io.BytesIO(data))
@@ -51,17 +59,24 @@ def _remote_bundle():
     return buf.getvalue()
 
 
+def _run_setup(a, action):
+    # Works whatever the remote login shell is (bash, zsh, fish): the real logic lives in setup.sh.
+    script = f"mkdir -p ~/.claude-voice && tar -xf - -C ~/.claude-voice && sh ~/.claude-voice/setup.sh {action}"
+    sys.exit(subprocess.run(["ssh", *a.ssh_args, a.host, script], input=_remote_bundle()).returncode)
+
+
 def cmd_install_remote(a):
-    block = " ".join("'" + line.replace("'", "'\''") + "'" for line in BASHRC)
-    script = (f'd={REMOTE_DIR}; mkdir -p "$d" && rm -f "$d/bin/rec" "$d/bin/arecord" && tar -xf - -C "$d" '
-              f'&& grep -qF "{MARK}" ~/.bashrc 2>/dev/null || printf "%s\n" {block} >> ~/.bashrc; '
-              f'echo "installed in $d (open a new terminal on the server)"')
-    r = subprocess.run(["ssh", *a.ssh_args, a.host, script], input=_remote_bundle())
-    sys.exit(r.returncode)
+    _run_setup(a, "install")
+
+
+def cmd_uninstall_remote(a):
+    _run_setup(a, "uninstall")
 
 
 def cmd_daemon(a):
     """Keep a mic bridge + reverse SSH tunnel alive in the background (reconnects forever)."""
+    _sd()
+    from .bridge import Bridge
     bridge = Bridge(device=_device(a.device)).start()
     log = Path.home() / ".claude-voice" / "daemon.log"
     log.parent.mkdir(exist_ok=True)
@@ -77,22 +92,78 @@ def cmd_daemon(a):
 
 
 def cmd_autostart(a):
-    if sys.platform != "win32":
-        sys.exit("autostart is only implemented for Windows so far (use systemd/launchd to run `claude-voice daemon HOST`).")
-    startup = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs/Startup/claude-voice.vbs"
+    """Register `claude-voice daemon HOST` to start at login (one entry per host)."""
+    slug = re.sub(r"[^A-Za-z0-9_.-]", "_", a.host)
+    argv = ["-m", "claude_voice", "daemon", a.host, "--port", str(a.port)]
+    if a.device is not None:
+        argv += ["--device", a.device]
+    argv += ["--", *a.ssh_args]
+    if sys.platform == "win32":
+        path = Path(os.environ["APPDATA"]) / f"Microsoft/Windows/Start Menu/Programs/Startup/claude-voice-{slug}.vbs"
+        exe = Path(sys.executable).with_name("pythonw.exe")  # no console window
+        cmdline = subprocess.list2cmdline([str(exe), *argv]).replace('"', '""')
+        content = f'CreateObject("Wscript.Shell").Run "{cmdline}", 0, False\n'
+        start, stop = [], []
+        hint = f"Starts at next login. Start it now with:  claude-voice daemon {a.host}  (or log out/in)"
+    elif sys.platform == "darwin":
+        label = f"com.claude-voice.{slug}"
+        path = Path.home() / f"Library/LaunchAgents/{label}.plist"
+        args = "".join(f"<string>{_xml(x)}</string>" for x in (sys.executable, *argv))
+        content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>{label}</string>
+<key>ProgramArguments</key><array>{args}</array>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+</dict></plist>
+"""
+        start = [["launchctl", "load", "-w", str(path)]]
+        stop = [["launchctl", "unload", "-w", str(path)]]
+        hint = "Running now and at every login."
+    else:
+        unit = f"claude-voice-{slug}.service"
+        path = Path.home() / ".config/systemd/user" / unit
+        content = f"""[Unit]
+Description=claude-voice microphone tunnel to {a.host}
+
+[Service]
+ExecStart={" ".join(_systemd_quote(x) for x in (sys.executable, *argv))}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+        start = [["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", "--now", unit]]
+        stop = [["systemctl", "--user", "disable", "--now", unit]]
+        hint = f"Running now and at every login. Status:  systemctl --user status {unit}"
+
     if a.remove:
-        startup.unlink(missing_ok=True)
-        return print("removed", startup)
-    exe = Path(sys.executable).with_name("pythonw.exe")
-    extra = " ".join(a.ssh_args)
-    startup.write_text(
-        f'CreateObject("Wscript.Shell").Run Chr(34) & "{exe}" & Chr(34) & " -m claude_voice daemon {a.host} '
-        f'--port {a.port} {extra}", 0, False\n')
-    print(f"Installed {startup}\nStarts at next login. Start it now with:  claude-voice daemon {a.host}  (or log out/in)")
+        if path.exists():
+            for c in stop:
+                subprocess.call(c)
+            path.unlink()
+        return print("removed", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    for c in start:
+        subprocess.check_call(c)
+    print(f"Installed {path}\n{hint}")
+
+
+def _xml(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _systemd_quote(s):
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$") + '"'
 
 
 def cmd_connect(a):
     """One-off interactive SSH with the tunnel (alternative to the daemon)."""
+    _sd()
+    from .bridge import Bridge
     bridge = Bridge(device=_device(a.device)).start()
     print(f"Mic bridge on 127.0.0.1:{bridge.port} -> remote port {a.port}")
     cmd = ["ssh", "-t", "-o", "ExitOnForwardFailure=yes", "-R", f"{a.port}:127.0.0.1:{bridge.port}",
@@ -104,7 +175,10 @@ def cmd_connect(a):
 
 
 def main():
-    p = argparse.ArgumentParser(prog="claude-voice", description="Use Claude Code /voice over SSH.")
+    p = argparse.ArgumentParser(
+        prog="claude-voice", description="Use Claude Code /voice over SSH.",
+        epilog="Pass extra ssh options after `--`, e.g.:  claude-voice daemon myserver -- -p 2222")
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("devices", help="list audio input devices").set_defaults(fn=cmd_devices)
 
@@ -114,20 +188,20 @@ def main():
     t.add_argument("--device")
     t.set_defaults(fn=cmd_test)
 
-    for name, fn, h in (("install-remote", cmd_install_remote, "set up the server (shim + `claude` wrapper in ~/.bashrc)"),
+    for name, fn, h in (("install-remote", cmd_install_remote, "set up the server (shim + `claude` wrapper)"),
+                        ("uninstall-remote", cmd_uninstall_remote, "remove everything claude-voice put on the server"),
                         ("daemon", cmd_daemon, "background mic tunnel to HOST, auto-reconnecting"),
-                        ("autostart", cmd_autostart, "run the daemon at login (Windows)"),
+                        ("autostart", cmd_autostart, "run the daemon at login (Windows, macOS, Linux/systemd)"),
                         ("connect", cmd_connect, "one-off SSH session with the mic tunnel")):
-        s = sub.add_parser(name, help=h)
+        s = sub.add_parser(name, help=h, description=h)
         s.add_argument("host", help="[user@]host or ~/.ssh/config alias")
-        s.add_argument("ssh_args", nargs="*", help="extra ssh args")
+        s.add_argument("ssh_args", nargs="*", help="extra ssh args, after `--`")
         s.set_defaults(fn=fn)
         if name in ("daemon", "autostart", "connect"):
-            s.add_argument("--port", type=int, default=48713, help="remote tunnel port")
-        if name in ("daemon", "connect"):
+            s.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"remote tunnel port (default {DEFAULT_PORT})")
             s.add_argument("--device", help="input device index or name (see `devices`)")
         if name == "autostart":
-            s.add_argument("--remove", action="store_true")
+            s.add_argument("--remove", action="store_true", help="unregister instead")
     a = p.parse_args()
     a.fn(a)
 

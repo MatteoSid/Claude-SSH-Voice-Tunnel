@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      - name: Build
+        run: uv build
+      - name: Install the built wheel and smoke-test the CLI
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl
+          claude-voice --version
+          claude-voice --help
+          python -c "import sounddevice; from claude_voice import cli; assert len(cli._remote_bundle()) > 0"
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck --severity=warning src/claude_voice/shim/*
+      - name: setup.sh install/uninstall round-trip
+        run: |
+          export HOME="$(mktemp -d)"
+          echo 'alias keep=1' > "$HOME/.bashrc"
+          mkdir -p "$HOME/.claude-voice" && cp src/claude_voice/shim/setup.sh "$HOME/.claude-voice/"
+          sh "$HOME/.claude-voice/setup.sh" install
+          sh "$HOME/.claude-voice/setup.sh" install   # idempotent
+          test "$(grep -c '>>> claude-voice >>>' "$HOME/.bashrc")" = 1
+          sh "$HOME/.claude-voice/setup.sh" uninstall
+          test "$(cat "$HOME/.bashrc")" = 'alias keep=1'
+          test ! -e "$HOME/.claude-voice"

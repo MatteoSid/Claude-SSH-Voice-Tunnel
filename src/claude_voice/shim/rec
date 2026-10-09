@@ -6,7 +6,7 @@ case "$1" in
 esac
 PORT="${CLAUDE_VOICE_PORT:-48713}"
 if ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
-  echo "claude-voice: no microphone tunnel on 127.0.0.1:$PORT (connect with 'claude-voice connect')" >&2
+  echo "claude-voice: no microphone tunnel on 127.0.0.1:$PORT (run 'claude-voice daemon HOST' on your computer)" >&2
   exit 1
 fi
 exec 3<>"/dev/tcp/127.0.0.1/$PORT"

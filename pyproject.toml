@@ -1,17 +1,43 @@
 [project]
-name = "claude-voice"
-version = "0.1.0"
+name = "claude-ssh-voice"
+dynamic = ["version"]
 description = "Use Claude Code's native /voice over SSH by bridging your local microphone to the remote server."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Matteo Donato" }]
 requires-python = ">=3.9"
 dependencies = ["sounddevice>=0.4.6"]
+keywords = ["claude", "claude-code", "voice", "ssh", "microphone", "remote", "vscode"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Capture/Recording",
+    "Topic :: Software Development",
+]
+
+[project.urls]
+Homepage = "https://github.com/MatteoSid/Claude-SSH-Voice-Tunnel"
+Issues = "https://github.com/MatteoSid/Claude-SSH-Voice-Tunnel/issues"
+Changelog = "https://github.com/MatteoSid/Claude-SSH-Voice-Tunnel/blob/main/CHANGELOG.md"
 
 [project.scripts]
 claude-voice = "claude_voice.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/claude_voice/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claude_voice"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "README.md", "LICENSE", "CHANGELOG.md"]
