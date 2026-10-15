@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-10-15
+
+- `claude-wrap` detects the tunnel on WSL2 with mirrored networking, where `ss` can't see the listener: falls back to a connect probe with a 1 s timeout. Thanks to [@devilteo911](https://github.com/devilteo911).
+- `install-remote` and `connect` no longer break when `~/.ssh/config` sets `RemoteCommand` or `RequestTTY`. Thanks to [@devilteo911](https://github.com/devilteo911).
+- README: WSL2 mirrored-networking status and tested setups.
+
 ## 0.1.1 - 2026-10-15
 
 - Fix `autostart` not applying new options (e.g. `--port`) on re-run: the already-running instance is now stopped before the unit is rewritten. Thanks to [@devilteo911](https://github.com/devilteo911).
