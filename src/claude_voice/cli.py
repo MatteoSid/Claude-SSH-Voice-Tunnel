@@ -62,7 +62,10 @@ def _remote_bundle():
 def _run_setup(a, action):
     # Works whatever the remote login shell is (bash, zsh, fish): the real logic lives in setup.sh.
     script = f"mkdir -p ~/.claude-voice && tar -xf - -C ~/.claude-voice && sh ~/.claude-voice/setup.sh {action}"
-    sys.exit(subprocess.run(["ssh", *a.ssh_args, a.host, script], input=_remote_bundle()).returncode)
+    # A RemoteCommand / RequestTTY in ~/.ssh/config would clash with the command and corrupt the tar on stdin.
+    # Given after a.ssh_args: for -o the first value wins, so the user can still override.
+    cmd = ["ssh", *a.ssh_args, "-o", "RemoteCommand=none", "-o", "RequestTTY=no", a.host, script]
+    sys.exit(subprocess.run(cmd, input=_remote_bundle()).returncode)
 
 
 def cmd_install_remote(a):
@@ -170,7 +173,7 @@ def cmd_connect(a):
     bridge = Bridge(device=_device(a.device)).start()
     print(f"Mic bridge on 127.0.0.1:{bridge.port} -> remote port {a.port}")
     cmd = ["ssh", "-t", "-o", "ExitOnForwardFailure=yes", "-R", f"{a.port}:127.0.0.1:{bridge.port}",
-           *a.ssh_args, a.host, f"export CLAUDE_VOICE_PORT={a.port}; exec \"$SHELL\" -l"]
+           *a.ssh_args, "-o", "RemoteCommand=none", a.host, f"export CLAUDE_VOICE_PORT={a.port}; exec \"$SHELL\" -l"]
     try:
         sys.exit(subprocess.call(cmd))
     finally:
