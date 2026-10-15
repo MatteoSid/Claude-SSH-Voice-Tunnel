@@ -146,6 +146,9 @@ WantedBy=default.target
             path.unlink()
         return print("removed", path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():  # re-run with new options: stop the old instance, `enable --now` / `load` won't restart it
+        for c in stop:
+            subprocess.call(c)
     path.write_text(content)
     for c in start:
         subprocess.check_call(c)
