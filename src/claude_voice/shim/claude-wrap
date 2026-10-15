@@ -2,7 +2,9 @@
 # claude-voice: run the real `claude`; if the microphone tunnel is up, enable voice for this process.
 D="$HOME/.claude-voice"; PORT="${CLAUDE_VOICE_PORT:-48713}"
 REAL="$(type -P claude)" || { echo "claude-voice: claude not found in PATH" >&2; exit 127; }
-if [ -n "$CLAUDE_VOICE_OFF" ] || ! ss -ltn 2>/dev/null | grep -q "127.0.0.1:$PORT "; then
+# `ss` can't see a listener owned by the Windows side of WSL2 (mirrored networking), so fall back to a connect probe.
+# The timeout matters: there, connecting to a closed loopback port hangs instead of being refused.
+if [ -n "$CLAUDE_VOICE_OFF" ] || ! { ss -ltn 2>/dev/null | grep -q "127.0.0.1:$PORT " || timeout 1 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$PORT" 2>/dev/null; }; then
   exec "$REAL" "$@"
 fi
 export PATH="$D/shim:$PATH" CLAUDE_VOICE_PORT="$PORT"
