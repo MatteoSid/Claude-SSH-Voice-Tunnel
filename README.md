@@ -107,8 +107,12 @@ users on multi-user machines). Only use this with servers you trust.
 
 - Server must be Linux. The VS Code **Claude Code extension** (its own bundled binary) is not supported; the
   `claude` CLI in a VS Code terminal is.
-- Tested: Windows 11 client, Ubuntu 22.04 server, bash, VS Code Remote-SSH terminal. macOS/Linux autostart and
-  zsh/fish hooks are newer and less tested: reports welcome.
+- A WSL2 server reached through Windows OpenSSH works with `networkingMode=mirrored` in `.wslconfig` (the tunnel
+  listens on the Windows side and WSL reaches it over the shared loopback). Other networking modes are untested.
+  `install-remote` doesn't support it yet: it runs its script in the Windows shell, not in WSL.
+- Tested: Windows 11 client, Ubuntu 22.04 server, bash, VS Code Remote-SSH terminal. Also an Ubuntu 26.04 client
+  (systemd autostart) with an Ubuntu 22.04 server and with a WSL2 (mirrored) server, over plain SSH. macOS
+  autostart and zsh/fish hooks are newer and less tested: reports welcome.
 
 ## Contributing
 
