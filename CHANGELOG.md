@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 - 2026-10-15
+
+- Fix `autostart` not applying new options (e.g. `--port`) on re-run: the already-running instance is now stopped before the unit is rewritten. Thanks to [@devilteo911](https://github.com/devilteo911).
+
 ## 0.1.0 - 2026-10-09
 
 First public release.
