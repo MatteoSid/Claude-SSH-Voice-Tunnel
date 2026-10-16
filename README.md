@@ -4,6 +4,10 @@
 [![PyPI](https://img.shields.io/pypi/v/claude-ssh-voice)](https://pypi.org/project/claude-ssh-voice/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="docs/intro.svg" alt="claude-voice: your microphone reaches Claude Code on the server through an SSH tunnel" width="800">
+</p>
+
 Use Claude Code's native **`/voice`** dictation when Claude Code runs on a remote server over SSH
 (plain SSH or VS Code Remote-SSH terminals).
 
