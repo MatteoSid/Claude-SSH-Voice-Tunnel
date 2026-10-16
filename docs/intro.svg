@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270" role="img" aria-label="claude-voice: your microphone reaches Claude Code on the server through an SSH tunnel">
+  <style>
+    .bg    { fill: #0d1117; }
+    .title { font: 700 54px "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; fill: #e6edf3; text-anchor: middle; }
+    .sub   { font: 400 20px "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; fill: #8b949e; text-anchor: middle; }
+    .label { font: 500 15px "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; fill: #8b949e; text-anchor: middle; }
+    .node  { fill: #161b22; stroke: #30363d; stroke-width: 2; }
+    .rail  { stroke: #30363d; stroke-width: 2; stroke-dasharray: 4 6; }
+    .dot   { fill: #3fb950; }
+
+    .up    { animation: up 0.8s ease-out both; }
+    .glow  { animation: glow 0.4s ease-out both; }
+    .travel { animation: travel 2.2s ease-in-out 2.2s both; }
+
+    @keyframes up {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes glow {
+      from { stroke: #30363d; fill: #161b22; }
+      to   { stroke: #3fb950; fill: #0f2a17; }
+    }
+    @keyframes travel {
+      0%   { opacity: 1; transform: translateX(0); }
+      90%  { opacity: 1; transform: translateX(540px); }
+      100% { opacity: 0; transform: translateX(540px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; }
+      .dot { opacity: 0; }
+    }
+  </style>
+
+  <rect class="bg" width="800" height="270" rx="16"/>
+
+  <text class="title up" x="400" y="110" style="animation-delay: 0.2s">claude-<tspan style="fill: #3fb950">voice</tspan></text>
+  <text class="sub up" x="400" y="150" style="animation-delay: 1s">Claude Code's /voice dictation, over SSH</text>
+
+  <line class="rail" x1="152" y1="205" x2="378" y2="205"/>
+  <line class="rail" x1="422" y1="205" x2="648" y2="205"/>
+
+  <circle class="node glow" cx="130" cy="205" r="22" style="animation-delay: 0.6s"/>
+  <circle class="node glow" cx="400" cy="205" r="22" style="animation-delay: 3.3s"/>
+  <circle class="node glow" cx="670" cy="205" r="22" style="animation-delay: 4.4s"/>
+
+  <circle class="dot travel" cx="130" cy="205" r="6"/>
+
+  <text class="label up" x="130" y="252" style="animation-delay: 1.2s">your mic</text>
+  <text class="label up" x="400" y="252" style="animation-delay: 1.4s">ssh -R tunnel</text>
+  <text class="label up" x="670" y="252" style="animation-delay: 1.6s">server</text>
+</svg>
