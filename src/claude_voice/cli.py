@@ -1,4 +1,5 @@
 import argparse
+import array
 import io
 import os
 import re
@@ -33,16 +34,24 @@ def cmd_devices(_):
 
 
 def cmd_test(a):
+    if not a.seconds > 0:
+        sys.exit("claude-voice: --seconds must be positive")
     sd = _sd()
-    from .bridge import RATE
+    from .bridge import BLOCK, RATE
     print(f"Recording {a.seconds}s from the microphone... speak now.")
-    data = sd.rec(int(a.seconds * RATE), samplerate=RATE, channels=1, dtype="int16",
-                  device=_device(a.device))
-    sd.wait()
+    # Short reads, like the bridge: sd.rec() needs NumPy, and one long read would block Ctrl+C.
+    frames, chunks = int(a.seconds * RATE), []
+    with sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=BLOCK,
+                           device=_device(a.device)) as stream:
+        while frames > 0:
+            n = min(BLOCK, frames)
+            chunks.append(bytes(stream.read(n)[0]))
+            frames -= n
+    data = b"".join(chunks)
     with wave.open(a.out, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
-        w.writeframes(data.tobytes())
-    peak = int(abs(data).max())
+        w.writeframes(data)
+    peak = min(max(map(abs, array.array("h", data)), default=0), 32767)  # abs(-32768) is 32768
     print(f"Saved {a.out} (peak level {peak}/32767){' - looks silent!' if peak < 200 else ''}")
 
 
